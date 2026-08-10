@@ -1,0 +1,38 @@
+# .github/workflows/daily-sales.yml
+name: Daily 5PM WhatsApp Sales Bot
+
+on:
+  schedule:
+    # 16:00 UTC corresponds to 5:00 PM UK BST (or adjust to 17:00 UTC during winter GMT)
+    - cron: '0 16 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  send-sales-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Restore WhatsApp Session
+        run: |
+          echo "${{ secrets.WA_SESSION_BASE64 }}" | base64 -d > auth.tar.gz
+          tar -xzf auth.tar.gz
+
+      - name: Run Sales Bot
+        run: node index.js
+        env:
+          HARDWARE_API_TOKEN: ${{ secrets.HARDWARE_API_TOKEN }}
+          HARDWARE_COMPANY_DOMAIN: ${{ secrets.HARDWARE_COMPANY_DOMAIN }}
+          GATE_API_TOKEN: ${{ secrets.GATE_API_TOKEN }}
+          GATE_COMPANY_DOMAIN: ${{ secrets.GATE_COMPANY_DOMAIN }}
+          WHATSAPP_GROUP_ID: ${{ secrets.WHATSAPP_GROUP_ID }}
