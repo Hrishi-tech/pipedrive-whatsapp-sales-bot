@@ -109,6 +109,7 @@ async function sendToWhatsAppGroup(messageText) {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    defaultQueryTimeoutMs: 60000,
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -130,8 +131,13 @@ async function sendToWhatsAppGroup(messageText) {
         }, 3000);
       } else if (connection === "close") {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        if (statusCode === 401) {
-          reject(new Error("WhatsApp session invalid. Re-authenticate locally."));
+        const shouldReconnect = statusCode !== 401 && statusCode !== 403;
+
+        if (shouldReconnect) {
+          console.log("Connection dropped momentarily. Retrying connection...");
+          sendToWhatsAppGroup(messageText).then(resolve).catch(reject);
+        } else {
+          reject(new Error("WhatsApp session invalid (401/403). Re-authenticate locally with node authenticate.js."));
         }
       }
     });
