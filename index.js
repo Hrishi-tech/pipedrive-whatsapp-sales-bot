@@ -90,20 +90,18 @@ function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) 
     year: "numeric",
   });
 
-  let msg = `🚀 *TFS DAILY SALES UPDATE*\n`;
-  msg += `📅 *${dateStr}* | 🕒 17:00\n\n`;
+  return `*TFS DAILY SALES UPDATE*
+${dateStr} | 17:00
+\`\`\`
+DAILY IN ────── £${dailyStats.total}k
+  ├─ Gate       £${dailyStats.gate}k
+  └─ Hardware   £${dailyStats.hardware}k
+     ├─ Deals   £${dailyHardwareBreakdown.hardware.value}k
+     └─ Web     £${dailyHardwareBreakdown.web.value}k
 
-  msg += `💷 *Daily In:* £${dailyStats.total}k (${dailyStats.count} deals)\n`;
-  msg += `  └ 🚪 *Gate:* £${dailyStats.gate}k (${dailyStats.gateCount})\n`;
-  msg += `  └ 🛠️ *Hardware Total:* £${dailyStats.hardware}k (${dailyStats.hardwareCount})\n`;
-  msg += `      • Hardware Deals: £${dailyHardwareBreakdown.hardware.value}k (${dailyHardwareBreakdown.hardware.count})\n`;
-  msg += `      • Web Sales: £${dailyHardwareBreakdown.web.value}k (${dailyHardwareBreakdown.web.count})\n\n`;
-
-  msg += `💷 *Monthly In:* £${monthlyStats.total}k (${monthlyStats.count} deals)\n`;
-  msg += `  └ 🚪 *Gate:* £${monthlyStats.gate}k (${monthlyStats.gateCount})\n`;
-  msg += `  └ 🛠️ *Hardware Total:* £${monthlyStats.hardware}k (${monthlyStats.hardwareCount})`;
-
-  return msg;
+MONTHLY IN ──── £${monthlyStats.total}k
+  ├─ Gate       £${monthlyStats.gate}k
+  └─ Hardware   £${monthlyStats.hardware}k\`\`\``;
 }
 
 async function sendToWhatsAppGroup(messageText) {
