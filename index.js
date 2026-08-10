@@ -1,7 +1,7 @@
 // index.js
 require("dotenv").config();
 const axios = require("axios");
-const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require("@whiskeysockets/baileys");
 
 const HARDWARE = {
   token: process.env.HARDWARE_API_TOKEN,
@@ -78,9 +78,6 @@ function calculateHardwareSalesBreakdown(deals) {
   };
 }
 
-// -------------------------------------------------------------
-// WHERE THE MESSAGE IS FORMATTED
-// -------------------------------------------------------------
 function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) {
   const dateStr = new Date().toLocaleDateString("en-GB", {
     timeZone: "Europe/London",
@@ -109,7 +106,10 @@ async function sendToWhatsAppGroup(messageText) {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    browser: Browsers.ubuntu("Chrome"),
+    connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 30000,
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -131,13 +131,13 @@ async function sendToWhatsAppGroup(messageText) {
         }, 3000);
       } else if (connection === "close") {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== 401 && statusCode !== 403;
+        console.log(`Connection closed (Status Code: ${statusCode || "unknown"}).`);
 
-        if (shouldReconnect) {
-          console.log("Connection dropped momentarily. Retrying connection...");
-          sendToWhatsAppGroup(messageText).then(resolve).catch(reject);
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403) {
+          reject(new Error("WhatsApp session invalid. Re-authenticate locally."));
         } else {
-          reject(new Error("WhatsApp session invalid (401/403). Re-authenticate locally with node authenticate.js."));
+          console.log("Transient network drop or stream restart required. Retrying...");
+          sendToWhatsAppGroup(messageText).then(resolve).catch(reject);
         }
       }
     });
@@ -152,7 +152,6 @@ async function main() {
       fetchWonDeals(GATE),
     ]);
 
-    // Daily calculations
     const dailyWon = [...hardwareDeals.today, ...gateDeals.today];
     const dailyStats = {
       total: calculateSalesValue(dailyWon),
@@ -164,7 +163,6 @@ async function main() {
     };
     const dailyHardwareBreakdown = calculateHardwareSalesBreakdown(hardwareDeals.today);
 
-    // Monthly calculations
     const monthlyWon = [...hardwareDeals.month, ...gateDeals.month];
     const monthlyStats = {
       total: calculateSalesValue(monthlyWon),
