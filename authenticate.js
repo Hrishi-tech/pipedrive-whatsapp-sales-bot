@@ -1,5 +1,5 @@
 // authenticate.js
-const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode-terminal");
 
 async function initAuth() {
@@ -7,13 +7,12 @@ async function initAuth() {
   
   const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: true,
   });
 
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", async (update) => {
-    const { connection, qr } = update;
+    const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
       console.log("\nScan the QR code below with your WhatsApp linked device:\n");
@@ -32,8 +31,19 @@ async function initAuth() {
         console.log(`  Group ID:   ${group.id}\n`);
       });
       console.log("======================================================");
-      console.log("Copy your target Group ID for your secrets. You can close this process now.");
+      console.log("Copy your target Group ID for your secrets.");
       process.exit(0);
+    } else if (connection === "close") {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+      // Code 515 requires a restart right after pairing - automatically reconnect
+      if (shouldReconnect) {
+        console.log("Connection updating (standard after QR scan). Reconnecting...");
+        initAuth();
+      } else {
+        console.log("Session logged out. Delete 'auth_info' folder and scan again.");
+      }
     }
   });
 }
