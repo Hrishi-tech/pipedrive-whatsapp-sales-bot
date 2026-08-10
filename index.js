@@ -90,17 +90,17 @@ function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) 
     year: "numeric",
   });
 
-  return `*TFS DAILY SALES UPDATE*
+  return `*🚀 TFS DAILY SALES UPDATE*
 ${dateStr} | 17:00
 \`\`\`
 DAILY IN ────── £${dailyStats.total}k
-  ├─ Gate       £${dailyStats.gate}k
+  ├─ Gates      £${dailyStats.gate}k
   └─ Hardware   £${dailyStats.hardware}k
      ├─ Deals   £${dailyHardwareBreakdown.hardware.value}k
      └─ Web     £${dailyHardwareBreakdown.web.value}k
 
 MONTHLY IN ──── £${monthlyStats.total}k
-  ├─ Gate       £${monthlyStats.gate}k
+  ├─ Gates      £${monthlyStats.gate}k
   └─ Hardware   £${monthlyStats.hardware}k\`\`\``;
 }
 
