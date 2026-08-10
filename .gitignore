@@ -1,0 +1,9 @@
+# Create .gitignore
+cat < .gitignore
+node_modules/
+.env
+auth_info/
+*.tar.gz
+*.zip
+auth_base64.txt
+EOF
