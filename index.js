@@ -18,8 +18,9 @@ const HARDWARE_PIPELINES = {
   WEB_SALES: 12,
 };
 
-async function fetchWonDealsToday(crm) {
-  if (!crm.token || !crm.domain) return [];
+// Fetches won deals for both Today and Current Month
+async function fetchWonDeals(crm) {
+  if (!crm.token || !crm.domain) return { today: [], month: [] };
 
   const response = await axios.get(
     `https://${crm.domain}.pipedrive.com/api/v1/deals`,
@@ -33,29 +34,22 @@ async function fetchWonDealsToday(crm) {
     }
   );
 
-  // Get current date in London timezone (YYYY-MM-DD)
-  const today = new Date().toLocaleDateString("en-CA", {
+  // Get current date and month in London timezone
+  const todayStr = new Date().toLocaleDateString("en-CA", {
     timeZone: "Europe/London",
-  });
+  }); // "YYYY-MM-DD"
+  const monthStr = todayStr.slice(0, 7); // "YYYY-MM"
 
-  return (response.data.data || []).filter(
-    (deal) => deal.won_time && deal.won_time.startsWith(today)
+  const deals = response.data.data || [];
+  
+  const monthDeals = deals.filter(
+    (deal) => deal.won_time && deal.won_time.startsWith(monthStr)
   );
-}
+  const todayDeals = monthDeals.filter(
+    (deal) => deal.won_time && deal.won_time.startsWith(todayStr)
+  );
 
-function calculateSalesByOwner(deals) {
-  const stats = {};
-  deals.forEach((deal) => {
-    const owner = deal.owner_name || "Unknown";
-    const value = Number(deal.value || 0);
-
-    if (!stats[owner]) {
-      stats[owner] = { count: 0, value: 0 };
-    }
-    stats[owner].count++;
-    stats[owner].value += value;
-  });
-  return stats;
+  return { today: todayDeals, month: monthDeals };
 }
 
 function calculateSalesValue(deals) {
@@ -84,7 +78,10 @@ function calculateHardwareSalesBreakdown(deals) {
   };
 }
 
-function buildWhatsAppSummary(salesStats, hardwareSalesBreakdown) {
+// -------------------------------------------------------------
+// WHERE THE MESSAGE IS FORMATTED
+// -------------------------------------------------------------
+function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) {
   const dateStr = new Date().toLocaleDateString("en-GB", {
     timeZone: "Europe/London",
     weekday: "short",
@@ -95,28 +92,16 @@ function buildWhatsAppSummary(salesStats, hardwareSalesBreakdown) {
 
   let msg = `🚀 *TFS DAILY SALES UPDATE*\n`;
   msg += `📅 *${dateStr}* | 🕒 17:00\n\n`;
-  msg += `━━━━━━━━━━━━━━━━━\n`;
-  msg += `🏆 *END OF DAY SALES FIGURES*\n`;
-  msg += `━━━━━━━━━━━━━━━━━\n\n`;
 
-  msg += `💷 *Total Sales:* £${salesStats.total}k (${salesStats.count} deals)\n`;
-  msg += `  └ 🚪 *Gate:* £${salesStats.gate}k (${salesStats.gateCount})\n`;
-  msg += `  └ 🛠 *Hardware Total:* £${salesStats.hardware}k (${salesStats.hardwareCount})\n`;
-  msg += `      • Hardware Deals: £${hardwareSalesBreakdown.hardware.value}k (${hardwareSalesBreakdown.hardware.count})\n`;
-  msg += `      • Web Sales: £${hardwareSalesBreakdown.web.value}k (${hardwareSalesBreakdown.web.count})\n\n`;
+  msg += `💷 *Daily In:* £${dailyStats.total}k (${dailyStats.count} deals)\n`;
+  msg += `  └ 🚪 *Gate:* £${dailyStats.gate}k (${dailyStats.gateCount})\n`;
+  msg += `  └ 🛠️ *Hardware Total:* £${dailyStats.hardware}k (${dailyStats.hardwareCount})\n`;
+  msg += `      • Hardware Deals: £${dailyHardwareBreakdown.hardware.value}k (${dailyHardwareBreakdown.hardware.count})\n`;
+  msg += `      • Web Sales: £${dailyHardwareBreakdown.web.value}k (${dailyHardwareBreakdown.web.count})\n\n`;
 
-  msg += `👤 *Individual Sales Breakdown*\n`;
-  const sortedUsers = Object.entries(salesStats.users).sort(
-    (a, b) => b[1].value - a[1].value
-  );
-
-  if (sortedUsers.length === 0) {
-    msg += `_No won sales recorded today._\n`;
-  } else {
-    sortedUsers.forEach(([name, data]) => {
-      msg += `• *${name}:* £${(data.value / 1000).toFixed(2)}k (${data.count})\n`;
-    });
-  }
+  msg += `💷 *Monthly In:* £${monthlyStats.total}k (${monthlyStats.count} deals)\n`;
+  msg += `  └ 🚪 *Gate:* £${monthlyStats.gate}k (${monthlyStats.gateCount})\n`;
+  msg += `  └ 🛠️ *Hardware Total:* £${monthlyStats.hardware}k (${monthlyStats.hardwareCount})`;
 
   return msg;
 }
@@ -158,24 +143,35 @@ async function sendToWhatsAppGroup(messageText) {
 async function main() {
   try {
     console.log("Fetching Pipedrive sales data...");
-    const [hardwareWon, gateWon] = await Promise.all([
-      fetchWonDealsToday(HARDWARE),
-      fetchWonDealsToday(GATE),
+    const [hardwareDeals, gateDeals] = await Promise.all([
+      fetchWonDeals(HARDWARE),
+      fetchWonDeals(GATE),
     ]);
 
-    const allWon = [...hardwareWon, ...gateWon];
-    const salesStats = {
-      total: calculateSalesValue(allWon),
-      count: allWon.length,
-      gate: calculateSalesValue(gateWon),
-      gateCount: gateWon.length,
-      hardware: calculateSalesValue(hardwareWon),
-      hardwareCount: hardwareWon.length,
-      users: calculateSalesByOwner(allWon),
+    // Daily calculations
+    const dailyWon = [...hardwareDeals.today, ...gateDeals.today];
+    const dailyStats = {
+      total: calculateSalesValue(dailyWon),
+      count: dailyWon.length,
+      gate: calculateSalesValue(gateDeals.today),
+      gateCount: gateDeals.today.length,
+      hardware: calculateSalesValue(hardwareDeals.today),
+      hardwareCount: hardwareDeals.today.length,
+    };
+    const dailyHardwareBreakdown = calculateHardwareSalesBreakdown(hardwareDeals.today);
+
+    // Monthly calculations
+    const monthlyWon = [...hardwareDeals.month, ...gateDeals.month];
+    const monthlyStats = {
+      total: calculateSalesValue(monthlyWon),
+      count: monthlyWon.length,
+      gate: calculateSalesValue(gateDeals.month),
+      gateCount: gateDeals.month.length,
+      hardware: calculateSalesValue(hardwareDeals.month),
+      hardwareCount: hardwareDeals.month.length,
     };
 
-    const hardwareBreakdown = calculateHardwareSalesBreakdown(hardwareWon);
-    const summaryMsg = buildWhatsAppSummary(salesStats, hardwareBreakdown);
+    const summaryMsg = buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats);
 
     console.log("\nGenerated WhatsApp Payload:\n", summaryMsg);
     await sendToWhatsAppGroup(summaryMsg);
