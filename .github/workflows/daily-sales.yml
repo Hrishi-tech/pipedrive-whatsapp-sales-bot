@@ -25,12 +25,12 @@ jobs:
         run: |
           mkdir -p auth_info
           echo "${{ secrets.WA_SESSION_BASE64 }}" | base64 --decode > auth.zip
-          unzip -o auth.zip -d auth_info
-          # Flatten nested folder if auth_info/auth_info was created
+          unzip -o auth.zip -d auth_info || true
           if [ -d "auth_info/auth_info" ]; then
             mv auth_info/auth_info/* auth_info/
             rm -rf auth_info/auth_info
           fi
+          ls -la auth_info
 
       - name: Run Sales Bot
         env:
