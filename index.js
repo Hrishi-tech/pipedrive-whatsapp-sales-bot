@@ -52,9 +52,17 @@ async function fetchWonDeals(crm) {
   return { today: todayDeals, month: monthDeals };
 }
 
+// Helper to format numbers into UK currency strings (e.g., 19920 -> "19,920.00")
+function formatCurrency(amount) {
+  return Number(amount || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 function calculateSalesValue(deals) {
   let total = deals.reduce((acc, deal) => acc + Number(deal.value || 0), 0);
-  return (total / 1000).toFixed(2);
+  return formatCurrency(total);
 }
 
 function calculateHardwareSalesBreakdown(deals) {
@@ -73,11 +81,14 @@ function calculateHardwareSalesBreakdown(deals) {
   });
 
   return {
-    hardware: { value: (hardwareValue / 1000).toFixed(2), count: hardwareCount },
-    web: { value: (webValue / 1000).toFixed(2), count: webCount },
+    hardware: { value: formatCurrency(hardwareValue), count: hardwareCount },
+    web: { value: formatCurrency(webValue), count: webCount },
   };
 }
 
+// -------------------------------------------------------------
+// WHERE THE MESSAGE IS FORMATTED
+// -------------------------------------------------------------
 function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) {
   const dateStr = new Date().toLocaleDateString("en-GB", {
     timeZone: "Europe/London",
@@ -90,15 +101,15 @@ function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) 
   return `*🚀 TFS DAILY SALES UPDATE*
 ${dateStr} | 17:00
 \`\`\`
-DAILY IN ────── £${dailyStats.total}k
-  ├─ Gates      £${dailyStats.gate}k
-  └─ Hardware   £${dailyStats.hardware}k
-     ├─ Deals   £${dailyHardwareBreakdown.hardware.value}k
-     └─ Web     £${dailyHardwareBreakdown.web.value}k
+DAILY IN ───── £${dailyStats.total}
+  ├─ Gates     £${dailyStats.gate}
+  └─ Hardware  £${dailyStats.hardware}
+     ├─ Deals  £${dailyHardwareBreakdown.hardware.value}
+     └─ Web    £${dailyHardwareBreakdown.web.value}
 
-MONTHLY IN ──── £${monthlyStats.total}k
-  ├─ Gates      £${monthlyStats.gate}k
-  └─ Hardware   £${monthlyStats.hardware}k\`\`\``;
+MONTHLY IN ─── £${monthlyStats.total}
+  ├─ Gates     £${monthlyStats.gate}
+  └─ Hardware  £${monthlyStats.hardware}\`\`\``;
 }
 
 async function sendToWhatsAppGroup(messageText) {
