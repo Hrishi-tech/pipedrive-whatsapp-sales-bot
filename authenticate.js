@@ -8,7 +8,8 @@ async function initAuth() {
   
   const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: false
+    printQRInTerminal: false,
+    syncFullHistory: false, // Prevents downloading chat history into auth_info
   });
 
   sock.ev.on("creds.update", saveCreds);
