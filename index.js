@@ -1,6 +1,7 @@
 // index.js
 require("dotenv").config();
 const axios = require("axios");
+const puppeteer = require("puppeteer");
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require("@whiskeysockets/baileys");
 
 const HARDWARE = {
@@ -18,7 +19,9 @@ const HARDWARE_PIPELINES = {
   WEB_SALES: 12,
 };
 
-// Fetches won deals for both Today and Current Month
+// -------------------------------------------------------------
+// PIPEDRIVE SALES IN FETCHERS
+// -------------------------------------------------------------
 async function fetchWonDeals(crm) {
   if (!crm.token || !crm.domain) return { today: [], month: [] };
 
@@ -34,7 +37,6 @@ async function fetchWonDeals(crm) {
     }
   );
 
-  // Get current date and month in London timezone
   const todayStr = new Date().toLocaleDateString("en-CA", {
     timeZone: "Europe/London",
   }); // "YYYY-MM-DD"
@@ -52,7 +54,6 @@ async function fetchWonDeals(crm) {
   return { today: todayDeals, month: monthDeals };
 }
 
-// Helper to format numbers into UK currency strings (e.g., 19920 -> "19,920.00")
 function formatCurrency(amount) {
   return Number(amount || 0).toLocaleString("en-GB", {
     minimumFractionDigits: 0,
@@ -87,9 +88,61 @@ function calculateHardwareSalesBreakdown(deals) {
 }
 
 // -------------------------------------------------------------
-// WHERE THE MESSAGE IS FORMATTED
+// PUPPETEER LOOKER STUDIO SCRAPER
 // -------------------------------------------------------------
-function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) {
+async function fetchLookerSalesOut() {
+  let browser;
+  try {
+    console.log("Launching headless browser to fetch Looker Studio figures...");
+    browser = await puppeteer.launch({
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    await page.goto(
+      "https://datastudio.google.com/u/0/reporting/8c0d9521-743e-49b1-b402-816fb6f83fc9/page/p_0lwq0wdqmc",
+      { waitUntil: "networkidle2", timeout: 60000 }
+    );
+
+    // Pause to allow Looker Studio scorecards to execute background queries
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+
+    const salesOutData = await page.evaluate(() => {
+      const allText = Array.from(document.querySelectorAll("*"))
+        .map((el) => el.textContent.trim())
+        .filter(Boolean);
+
+      // Matches currency strings like "£772.53" or "£131,117.52"
+      const matches = allText.filter((text) => /^£[\d,]+(\.\d{2})?$/.test(text));
+      return [...new Set(matches)];
+    });
+
+    console.log("Scraped Looker Currency Values:", salesOutData);
+
+    return {
+      today: salesOutData[0] || "N/A",
+      month: salesOutData[1] || "N/A",
+    };
+  } catch (err) {
+    console.error("Looker scraping encountered an error:", err.message);
+    return { today: "N/A", month: "N/A" };
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+// -------------------------------------------------------------
+// MESSAGE FORMATTING & DISPATCH
+// -------------------------------------------------------------
+function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats, salesOut) {
   const dateStr = new Date().toLocaleDateString("en-GB", {
     timeZone: "Europe/London",
     weekday: "short",
@@ -106,10 +159,12 @@ DAILY IN ───── £${dailyStats.total}
   └─ Hardware  £${dailyStats.hardware}
      ├─ Deals  £${dailyHardwareBreakdown.hardware.value}
      └─ Web    £${dailyHardwareBreakdown.web.value}
+DAILY OUT ──── ${salesOut.today}
 
 MONTHLY IN ─── £${monthlyStats.total}
   ├─ Gates     £${monthlyStats.gate}
-  └─ Hardware  £${monthlyStats.hardware}\`\`\``;
+  └─ Hardware  £${monthlyStats.hardware}
+MONTHLY OUT ── ${salesOut.month}\`\`\``;
 }
 
 async function sendToWhatsAppGroup(messageText) {
@@ -157,10 +212,11 @@ async function sendToWhatsAppGroup(messageText) {
 
 async function main() {
   try {
-    console.log("Fetching Pipedrive sales data...");
-    const [hardwareDeals, gateDeals] = await Promise.all([
+    console.log("Fetching Pipedrive sales data and Looker OUT figures...");
+    const [hardwareDeals, gateDeals, salesOut] = await Promise.all([
       fetchWonDeals(HARDWARE),
       fetchWonDeals(GATE),
+      fetchLookerSalesOut(),
     ]);
 
     const dailyWon = [...hardwareDeals.today, ...gateDeals.today];
@@ -184,7 +240,7 @@ async function main() {
       hardwareCount: hardwareDeals.month.length,
     };
 
-    const summaryMsg = buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats);
+    const summaryMsg = buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats, salesOut);
 
     console.log("\nGenerated WhatsApp Payload:\n", summaryMsg);
     await sendToWhatsAppGroup(summaryMsg);
