@@ -112,27 +112,56 @@ async function fetchLookerSalesOut() {
       { waitUntil: "networkidle2", timeout: 60000 }
     );
 
-    // Pause to allow Looker Studio scorecards to execute background queries
+    // Wait 10 seconds for Looker Studio scorecards to finish loading
     await new Promise((resolve) => setTimeout(resolve, 10000));
 
     const salesOutData = await page.evaluate(() => {
-      const allText = Array.from(document.querySelectorAll("*"))
-        .map((el) => el.textContent.trim())
+      // Collect visible currency nodes with screen position coordinates
+      const elements = Array.from(document.querySelectorAll("*"));
+      
+      const currencyNodes = elements
+        .map((el) => {
+          const text = (el.innerText || el.textContent || "").trim();
+          // Filter to strictly £ numbers (excluding negative target numbers like £-457,907.97)
+          if (/^£[\d,]+(\.\d{2})?$/.test(text)) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              return { text, top: rect.top, left: rect.left };
+            }
+          }
+          return null;
+        })
         .filter(Boolean);
 
-      // Matches currency strings like "£772.53" or "£131,117.52"
-      const matches = allText.filter((text) => /^£[\d,]+(\.\d{2})?$/.test(text));
-      return [...new Set(matches)];
+      // Sort by vertical Y-position (top-to-bottom), then horizontal X-position (left-to-right)
+      currencyNodes.sort((a, b) => {
+        if (Math.abs(a.top - b.top) > 15) {
+          return a.top - b.top;
+        }
+        return a.left - b.left;
+      });
+
+      // Filter unique text values sequentially
+      const uniqueNodes = [];
+      currencyNodes.forEach((node) => {
+        if (!uniqueNodes.some((item) => item.text === node.text && Math.abs(item.top - node.top) < 5)) {
+          uniqueNodes.push(node);
+        }
+      });
+
+      return uniqueNodes.map((item) => item.text);
     });
 
-    console.log("Scraped Looker Currency Values:", salesOutData);
+    console.log("Visual Order Extracted Figures:", salesOutData);
 
+    // Position 0 = Today Sales OUT (£1,747.04)
+    // Position 2 = This Month Sales OUT (£132,092.03)
     return {
       today: salesOutData[0] || "N/A",
-      month: salesOutData[1] || "N/A",
+      month: salesOutData[2] || salesOutData[1] || "N/A",
     };
   } catch (err) {
-    console.error("Looker scraping encountered an error:", err.message);
+    console.error("Looker scraping error:", err.message);
     return { today: "N/A", month: "N/A" };
   } finally {
     if (browser) await browser.close();
