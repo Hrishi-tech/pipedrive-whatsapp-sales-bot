@@ -112,54 +112,55 @@ async function fetchLookerSalesOut() {
       { waitUntil: "networkidle2", timeout: 60000 }
     );
 
-    // Wait 10 seconds for Looker Studio scorecards to finish loading
+    // Pause 10s for Looker Studio scorecards to execute data queries
     await new Promise((resolve) => setTimeout(resolve, 10000));
 
     const salesOutData = await page.evaluate(() => {
-      // Collect visible currency nodes with screen position coordinates
-      const elements = Array.from(document.querySelectorAll("*"));
-      
-      const currencyNodes = elements
-        .map((el) => {
-          const text = (el.innerText || el.textContent || "").trim();
-          // Filter to strictly £ numbers (excluding negative target numbers like £-457,907.97)
-          if (/^£[\d,]+(\.\d{2})?$/.test(text)) {
-            const rect = el.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) {
-              return { text, top: rect.top, left: rect.left };
-            }
+      const allElements = Array.from(document.querySelectorAll("*"));
+
+      // 1. Find vertical Y-coordinates for row labels
+      let todayY = null;
+      let monthY = null;
+
+      allElements.forEach((el) => {
+        const text = (el.innerText || el.textContent || "").trim();
+        if (text === "Today:") {
+          todayY = el.getBoundingClientRect().top;
+        } else if (text === "This Month:") {
+          monthY = el.getBoundingClientRect().top;
+        }
+      });
+
+      // 2. Find all visible currency figures
+      const currencyNodes = [];
+      allElements.forEach((el) => {
+        const text = (el.innerText || el.textContent || "").trim();
+        if (/^£[\d,]+(\.\d{2})?$/.test(text)) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            currencyNodes.push({ text, top: rect.top, left: rect.left });
           }
-          return null;
-        })
-        .filter(Boolean);
-
-      // Sort by vertical Y-position (top-to-bottom), then horizontal X-position (left-to-right)
-      currencyNodes.sort((a, b) => {
-        if (Math.abs(a.top - b.top) > 15) {
-          return a.top - b.top;
-        }
-        return a.left - b.left;
-      });
-
-      // Filter unique text values sequentially
-      const uniqueNodes = [];
-      currencyNodes.forEach((node) => {
-        if (!uniqueNodes.some((item) => item.text === node.text && Math.abs(item.top - node.top) < 5)) {
-          uniqueNodes.push(node);
         }
       });
 
-      return uniqueNodes.map((item) => item.text);
+      // 3. Match row Y-position and select the leftmost figure (Sales OUT)
+      function getRowSalesOut(rowY) {
+        if (rowY === null) return "N/A";
+        const rowMatches = currencyNodes.filter(
+          (node) => Math.abs(node.top - rowY) < 40
+        );
+        rowMatches.sort((a, b) => a.left - b.left);
+        return rowMatches.length > 0 ? rowMatches[0].text : "N/A";
+      }
+
+      return {
+        today: getRowSalesOut(todayY),
+        month: getRowSalesOut(monthY),
+      };
     });
 
-    console.log("Visual Order Extracted Figures:", salesOutData);
-
-    // Position 0 = Today Sales OUT (£1,747.04)
-    // Position 2 = This Month Sales OUT (£132,092.03)
-    return {
-      today: salesOutData[0] || "N/A",
-      month: salesOutData[2] || salesOutData[1] || "N/A",
-    };
+    console.log("Anchored Extracted Figures:", salesOutData);
+    return salesOutData;
   } catch (err) {
     console.error("Looker scraping error:", err.message);
     return { today: "N/A", month: "N/A" };
