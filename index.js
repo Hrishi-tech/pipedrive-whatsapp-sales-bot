@@ -99,7 +99,7 @@ function buildWhatsAppSummary(dailyStats, dailyHardwareBreakdown, monthlyStats) 
   });
 
   return `*🚀 TFS DAILY SALES UPDATE*
-${dateStr} | 17:00
+${dateStr} | 16:55
 \`\`\`
 DAILY IN ───── £${dailyStats.total}
   ├─ Gates     £${dailyStats.gate}
