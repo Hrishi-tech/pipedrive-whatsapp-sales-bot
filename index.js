@@ -189,12 +189,14 @@ DAILY IN ───── £${dailyStats.total}
   └─ Hardware  £${dailyStats.hardware}
      ├─ Deals  £${dailyHardwareBreakdown.hardware.value}
      └─ Web    £${dailyHardwareBreakdown.web.value}
-DAILY OUT ──── ${salesOut.today}
 
 MONTHLY IN ─── £${monthlyStats.total}
   ├─ Gates     £${monthlyStats.gate}
   └─ Hardware  £${monthlyStats.hardware}
-MONTHLY OUT ── ${salesOut.month}\`\`\``;
+
+DAILY OUT ─── ${salesOut.today}
+
+MONTHLY OUT ─ ${salesOut.month}\`\`\``;
 }
 
 async function sendToWhatsAppGroup(messageText) {
