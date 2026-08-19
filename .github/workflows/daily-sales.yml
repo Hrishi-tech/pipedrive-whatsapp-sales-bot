@@ -1,9 +1,6 @@
 name: Daily Sales Update Bot
 
 on:
-  schedule:
-    # Runs at 17:00 UTC (18:00 BST) Monday through Friday
-    - cron: '0 17 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
